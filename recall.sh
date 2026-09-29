@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-export WOW_WINE_MODE="${WOW_WINE_MODE:-wow64}"
+if [[ -z "${WOW_WINE_MODE:-}" ]]; then
+  if [[ -x "$ROOT/runtime/qemu-wine32-bin/wine" && -x "$ROOT/runtime/qemu-i386-static" ]]; then
+    export WOW_WINE_MODE=qemu32
+  else
+    export WOW_WINE_MODE=wow64
+  fi
+else
+  export WOW_WINE_MODE
+fi
 export WINE_ROOT="${WINE_ROOT:-$ROOT/runtime/wine-11.18-staging-amd64-wow64}"
 export WOW_CLIENT_ROOT="${WOW_CLIENT_ROOT:-$ROOT/client/ChromieCraft_3.3.5a}"
 export DISPLAY="${DISPLAY:-:88}"
