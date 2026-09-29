@@ -1,0 +1,15 @@
+client/
+runtime/
+run/
+logs/
+state/db/
+recovery/*.tar.zst
+.env
+*.sql
+*.sql.gz
+*.sql.zst
+*.zip
+*.tar
+*.tar.gz
+*.tar.xz
+*.deb

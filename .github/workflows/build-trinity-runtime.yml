@@ -1,0 +1,96 @@
+name: Build pinned TrinityCore 3.3.5 runtime
+
+on:
+  push:
+    branches:
+      - bootstrap/wow-chromiecraft-fast-recall
+    paths:
+      - '.github/workflows/build-trinity-runtime.yml'
+      - 'manifests/fast-recall.json'
+      - 'scripts/**'
+      - 'server.sh'
+      - 'mysql.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      TC_COMMIT: f5f9bac4fa74da42e2dce419309362aede578e9d
+    steps:
+      - name: Checkout recall control plane
+        uses: actions/checkout@v5
+
+      - name: Checkout pinned TrinityCore
+        uses: actions/checkout@v5
+        with:
+          repository: TrinityCore/TrinityCore
+          ref: ${{ env.TC_COMMIT }}
+          path: upstream/TrinityCore
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -yq \
+            ccache ninja-build \
+            libboost-dev libboost-filesystem-dev libboost-locale-dev \
+            libboost-program-options-dev libboost-regex-dev libboost-thread-dev \
+            libssl-dev libreadline-dev zlib1g-dev libbz2-dev
+
+      - name: Configure release runtime
+        run: |
+          cmake -GNinja \
+            -S "$GITHUB_WORKSPACE/upstream/TrinityCore" \
+            -B "$GITHUB_WORKSPACE/build" \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/stage/install" \
+            -DTOOLS=1 \
+            -DSERVERS=1 \
+            -DSCRIPTS=static \
+            -DUSE_COREPCH=1 \
+            -DUSE_SCRIPTPCH=1 \
+            -DWITH_WARNINGS=1 \
+            -DWITH_COREDEBUG=0
+
+      - name: Build and install
+        run: |
+          cmake --build "$GITHUB_WORKSPACE/build" --parallel "$(nproc)"
+          cmake --install "$GITHUB_WORKSPACE/build"
+
+      - name: Verify binaries
+        run: |
+          set -euxo pipefail
+          test -x stage/install/bin/authserver
+          test -x stage/install/bin/worldserver
+          for b in mapextractor vmap4extractor vmap4assembler mmaps_generator; do
+            test -x "stage/install/bin/$b"
+          done
+          stage/install/bin/authserver --version
+          stage/install/bin/worldserver --version
+          ldd stage/install/bin/worldserver | tee stage/worldserver.ldd.txt
+          git -C upstream/TrinityCore rev-parse HEAD | tee stage/TRINITYCORE_COMMIT.txt
+          test "$(cat stage/TRINITYCORE_COMMIT.txt)" = "$TC_COMMIT"
+
+      - name: Package reusable warm layer
+        run: |
+          mkdir -p stage/evidence
+          cp manifests/fast-recall.json stage/evidence/
+          find stage/install -type f -print0 | sort -z | xargs -0 sha256sum > stage/evidence/SHA256SUMS
+          tar -C stage -czf trinitycore-335-f5f9bac-runtime.tar.gz install evidence TRINITYCORE_COMMIT.txt worldserver.ldd.txt
+          sha256sum trinitycore-335-f5f9bac-runtime.tar.gz > trinitycore-335-f5f9bac-runtime.tar.gz.sha256
+
+      - name: Upload reusable runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: trinitycore-335-f5f9bac-runtime
+          path: |
+            trinitycore-335-f5f9bac-runtime.tar.gz
+            trinitycore-335-f5f9bac-runtime.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
