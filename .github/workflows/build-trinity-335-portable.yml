@@ -31,7 +31,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -yq             ninja-build ccache             libboost-dev libboost-filesystem-dev libboost-locale-dev             libboost-program-options-dev libboost-regex-dev libboost-thread-dev             libssl-dev libreadline-dev zlib1g-dev libbz2-dev             p7zip-full zstd jq
+          sudo apt-get install -yq             ninja-build ccache             libboost-dev libboost-filesystem-dev libboost-locale-dev             libboost-program-options-dev libboost-regex-dev libboost-thread-dev             libssl-dev libreadline-dev zlib1g-dev libbz2-dev             p7zip-full zstd jq patchelf
 
       - name: Checkout exact TrinityCore revision
         uses: actions/checkout@v7
@@ -56,6 +56,19 @@ jobs:
           "$GITHUB_WORKSPACE/package/trinity/bin/authserver" --version
           "$GITHUB_WORKSPACE/package/trinity/bin/worldserver" --version
           echo "TRINITY_SHA=$(git -C upstream rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Bundle TrinityCore MySQL ABI
+        shell: bash
+        run: |
+          mkdir -p package/trinity/lib
+          mysql_lib="$(ldconfig -p | awk '/libmysqlclient\.so\.21 / {print $NF; exit}')"
+          test -n "$mysql_lib" && test -f "$mysql_lib"
+          cp -L "$mysql_lib" package/trinity/lib/libmysqlclient.so.21
+          for b in authserver worldserver; do
+            patchelf --set-rpath '$ORIGIN/../lib' "package/trinity/bin/$b"
+            readelf -d "package/trinity/bin/$b" | grep -E 'RUNPATH.*\$ORIGIN/\.\./lib'
+          done
+          sha256sum package/trinity/lib/libmysqlclient.so.21 > package/trinity/lib/libmysqlclient.so.21.sha256
 
       - name: Add SQL source and pinned TDB
         shell: bash
