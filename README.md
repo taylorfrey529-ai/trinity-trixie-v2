@@ -22,4 +22,4 @@ Fast-recall workspace for a local loopback-only World of Warcraft 3.3.5a (build 
 
 The WoW client is intentionally not stored in this public repository. Mount an authorized pre-extracted client at `client/ChromieCraft_3.3.5a/` or provide `CHROMIECRAFT_ARCHIVE` to a locally supplied archive.
 
-See `FAST-RECALL.md` for the persistence model and `HISTORY.md` for the recovered validated state.
+See `FAST-RECALL.md` for the persistence model. Historical validated state is kept in the private recovery snapshot, not the public repository.

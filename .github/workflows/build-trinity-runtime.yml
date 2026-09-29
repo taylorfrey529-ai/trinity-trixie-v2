@@ -12,6 +12,10 @@ on:
       - 'mysql.sh'
   workflow_dispatch:
 
+concurrency:
+  group: trinity-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
