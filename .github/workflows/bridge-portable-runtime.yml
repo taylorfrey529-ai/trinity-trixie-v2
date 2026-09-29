@@ -1,0 +1,97 @@
+name: Bridge portable TrinityCore runtime
+
+on:
+  push:
+    branches:
+      - bootstrap/wow-chromiecraft-fast-recall
+    paths:
+      - '.github/workflows/bridge-portable-runtime.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_RUN_ID: "36609619772"
+      SOURCE_ARTIFACT: trinity-335-portable-linux-x64
+    steps:
+      - name: Download verified source artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir source
+          cd source
+          sha256sum -c trinity-335-portable-linux-x64.tar.zst.sha256
+          ls -lh trinity-335-portable-linux-x64.tar.zst
+
+      - name: Split below connector ceiling
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p transfer
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          src=Path('source/trinity-335-portable-linux-x64.tar.zst')
+          chunk=240*1024*1024
+          logical_hash=hashlib.sha256(src.read_bytes()).hexdigest()
+          parts=[]; total=0
+          with src.open('rb') as f:
+              i=0
+              while True:
+                  data=f.read(chunk)
+                  if not data: break
+                  name=f'payload.part.{i:03d}'
+                  (Path('transfer')/name).write_bytes(data)
+                  parts.append({'index':i,'name':name,'size':len(data),'sha256':hashlib.sha256(data).hexdigest()})
+                  total += len(data); i += 1
+          assert total == src.stat().st_size
+          assert len(parts) == 3, len(parts)
+          manifest={
+              'schema_version':1,
+              'logical_name':src.name,
+              'logical_size':src.stat().st_size,
+              'logical_sha256':logical_hash,
+              'chunk_size':chunk,
+              'parts':parts,
+          }
+          Path('transfer/manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          print(json.dumps(manifest,indent=2))
+          PY
+
+      - name: Upload part 000
+        uses: actions/upload-artifact@v4
+        with:
+          name: trinity-portable-part-000
+          path: |
+            transfer/payload.part.000
+            transfer/manifest.json
+          compression-level: 0
+          retention-days: 1
+
+      - name: Upload part 001
+        uses: actions/upload-artifact@v4
+        with:
+          name: trinity-portable-part-001
+          path: |
+            transfer/payload.part.001
+            transfer/manifest.json
+          compression-level: 0
+          retention-days: 1
+
+      - name: Upload part 002
+        uses: actions/upload-artifact@v4
+        with:
+          name: trinity-portable-part-002
+          path: |
+            transfer/payload.part.002
+            transfer/manifest.json
+          compression-level: 0
+          retention-days: 1
