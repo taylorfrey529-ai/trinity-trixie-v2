@@ -1,0 +1,111 @@
+name: Build TrinityCore 3.3.5 portable runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - bootstrap/wow-chromiecraft-fast-recall
+    paths:
+      - '.github/workflows/build-trinity-335-portable.yml'
+      - 'manifests/portable-runtime.env'
+
+concurrency:
+  group: trinity-335-portable-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Load pins
+        shell: bash
+        run: cat manifests/portable-runtime.env >> "$GITHUB_ENV"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -yq             ninja-build ccache             libboost-dev libboost-filesystem-dev libboost-locale-dev             libboost-program-options-dev libboost-regex-dev libboost-thread-dev             libssl-dev libreadline-dev zlib1g-dev libbz2-dev             p7zip-full zstd jq
+
+      - name: Checkout exact TrinityCore revision
+        uses: actions/checkout@v7
+        with:
+          repository: TrinityCore/TrinityCore
+          ref: ${{ env.TRINITY_COMMIT }}
+          path: upstream
+          fetch-depth: 1
+
+      - name: Configure
+        run: |
+          test "$(git -C upstream rev-parse HEAD)" = "$TRINITY_COMMIT"
+          cmake -GNinja -S upstream -B build             -DCMAKE_BUILD_TYPE=Release             -DSERVERS=1 -DTOOLS=1 -DSCRIPTS=static             -DUSE_COREPCH=1 -DUSE_SCRIPTPCH=1             -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/package/trinity"
+
+      - name: Build and install
+        run: |
+          cmake --build build --parallel 2
+          cmake --install build
+          for b in authserver worldserver mapextractor vmap4extractor vmap4assembler mmaps_generator; do
+            test -x "$GITHUB_WORKSPACE/package/trinity/bin/$b"
+          done
+          "$GITHUB_WORKSPACE/package/trinity/bin/authserver" --version
+          "$GITHUB_WORKSPACE/package/trinity/bin/worldserver" --version
+          echo "TRINITY_SHA=$(git -C upstream rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Add SQL source and pinned TDB
+        shell: bash
+        run: |
+          mkdir -p package/trinity/source/sql package/trinity/tdb "$RUNNER_TEMP/tdb"
+          cp -a upstream/sql/. package/trinity/source/sql/
+          curl -fL --retry 4 -o "$RUNNER_TEMP/tdb/$TDB_ASSET"             "https://github.com/TrinityCore/TrinityCore/releases/download/$TDB_TAG/$TDB_ASSET"
+          echo "$TDB_SHA256  $RUNNER_TEMP/tdb/$TDB_ASSET" | sha256sum -c -
+          7z e -y -o"package/trinity/tdb" "$RUNNER_TEMP/tdb/$TDB_ASSET"
+          test -f "package/trinity/tdb/${TDB_ASSET%.7z}.sql"
+          sha256sum "package/trinity/tdb/${TDB_ASSET%.7z}.sql" > package/trinity/tdb/TDB-SQL.sha256
+
+      - name: Add portable MariaDB
+        shell: bash
+        run: |
+          file="mariadb-${MARIADB_VERSION}-linux-systemd-x86_64.tar.gz"
+          url="https://downloads.mariadb.org/rest-api/mariadb/${MARIADB_VERSION}/${file}"
+          checksum_url="${url}/checksum"
+          expected="$(curl -fsSL "$checksum_url" | jq -r '.response.checksum.sha256sum')"
+          test -n "$expected" && test "$expected" != null
+          curl -fL --retry 4 -o "$RUNNER_TEMP/$file" "$url"
+          echo "$expected  $RUNNER_TEMP/$file" | sha256sum -c -
+          mkdir -p package/mariadb
+          tar -xzf "$RUNNER_TEMP/$file" -C package/mariadb --strip-components=1
+          test -x package/mariadb/bin/mariadbd
+          test -x package/mariadb/bin/mariadb
+          echo "MARIADB_SHA256=$expected" >> "$GITHUB_ENV"
+
+      - name: Manifest and package
+        shell: bash
+        run: |
+          cat > package/RUNTIME-MANIFEST.env <<MANIFEST
+          TRINITY_BRANCH=$TRINITY_BRANCH
+          TRINITY_COMMIT=$TRINITY_COMMIT
+          TRINITY_SHA=$TRINITY_SHA
+          TDB_TAG=$TDB_TAG
+          TDB_ASSET=$TDB_ASSET
+          TDB_SHA256=$TDB_SHA256
+          MARIADB_VERSION=$MARIADB_VERSION
+          MARIADB_SHA256=$MARIADB_SHA256
+          MANIFEST
+          tar --zstd -cf trinity-335-portable-linux-x64.tar.zst -C package .
+          sha256sum trinity-335-portable-linux-x64.tar.zst > trinity-335-portable-linux-x64.tar.zst.sha256
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: trinity-335-portable-linux-x64
+          path: |
+            trinity-335-portable-linux-x64.tar.zst
+            trinity-335-portable-linux-x64.tar.zst.sha256
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
