@@ -15,6 +15,7 @@ Fast-recall workspace for a local loopback-only World of Warcraft 3.3.5a (build 
 ## Fast path
 
 ```bash
+./preflight-fast.sh
 ./recall.sh
 ```
 

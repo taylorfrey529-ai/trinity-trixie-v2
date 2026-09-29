@@ -7,9 +7,6 @@ on:
     paths:
       - '.github/workflows/build-trinity-runtime.yml'
       - 'manifests/fast-recall.json'
-      - 'scripts/**'
-      - 'server.sh'
-      - 'mysql.sh'
   workflow_dispatch:
 
 concurrency:
