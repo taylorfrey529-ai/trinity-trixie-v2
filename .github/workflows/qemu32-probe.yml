@@ -1,12 +1,29 @@
-name: qemu32 probe
+name: Build qemu32 Wine 11.18 runtime
+
 on:
   push:
     branches:
       - build/qemu32-wine1118-runtime-v2
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
-  probe:
+  build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - run: echo qemu32-probe
+      - name: Build and self-test qemu32 lane
+        run: bash .github/scripts/build-qemu32-wine1118-runtime.sh
+      - name: Upload transfer
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu32-wine1118-transfer
+          path: |
+            transfer/payload.part.*
+            transfer/manifest.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
