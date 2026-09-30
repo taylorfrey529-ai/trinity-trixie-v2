@@ -56,7 +56,6 @@ set -euo pipefail
 RUNTIME="$(cd "$(dirname "$0")/.." && pwd)"
 WINE_ROOT="$RUNTIME/wine-11.18-staging-x86-qemu"
 export WINELOADER="$WINE_ROOT/lib/wine/i386-unix/wine"
-export WINELOADERNOEXEC=1
 exec "$RUNTIME/qemu-i386-static" -L "$RUNTIME/wine32-qemu-rootfs" -R '0x100000000' "$WINELOADER" "$@"
 SH
 chmod 0755 "$RUNTIME/qemu-wine32-bin/wine"
@@ -113,7 +112,15 @@ echo "qemu32_reserve_rc=$RC_RESERVE"
 test "$RC_NO_RESERVE" -eq 0
 test "$RC_RESERVE" -eq 0
 
-"$WINE" --version
+echo "=== qemu32 wrapper probe ==="
+set +e
+bash -x "$WINE" --version
+RC_WRAPPER=$?
+set -e
+echo "qemu32_wrapper_rc=$RC_WRAPPER"
+test "$RC_WRAPPER" -eq 0
+
+echo "=== native wineserver probe ==="
 "$WINESERVER" -p0
 WINEDEBUG=-all "$WINE" wineboot.exe -u
 test -f "$WINEPREFIX/system.reg"
