@@ -20,8 +20,15 @@ ROOTFS="$RUNTIME/wine32-qemu-rootfs"
 mkdir -p "$WINE_OUT/lib/wine" "$WINE_OUT/bin" "$RUNTIME/qemu-wine32-bin"
 mkdir -p "$ROOTFS/lib" "$ROOTFS/usr/lib" "$ROOTFS/usr/share" "$ROOTFS/etc"
 
+echo "=== WineHQ 11.18 Unix-side layout ==="
+find /opt/wine-staging -type f \( -name wine -o -name wineserver -o -name wine-preloader \) -print -exec file {} \; || true
 I386_UNIX="$(find /opt/wine-staging -type d -path '*/wine/i386-unix' -print -quit)"
 I386_WINDOWS="$(find /opt/wine-staging -type d -path '*/wine/i386-windows' -print -quit)"
+echo "I386_UNIX=$I386_UNIX"
+echo "I386_WINDOWS=$I386_WINDOWS"
+if [[ -n "$I386_UNIX" ]]; then
+  find "$I386_UNIX" -maxdepth 1 -type f -print -exec file {} \; || true
+fi
 test -n "$I386_UNIX"
 test -n "$I386_WINDOWS"
 cp -a "$I386_UNIX" "$WINE_OUT/lib/wine/"
