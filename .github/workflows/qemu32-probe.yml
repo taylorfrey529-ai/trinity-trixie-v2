@@ -1,0 +1,12 @@
+name: qemu32 probe
+on:
+  push:
+    branches:
+      - build/qemu32-wine1118-runtime-v2
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo qemu32-probe
