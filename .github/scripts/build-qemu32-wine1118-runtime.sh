@@ -33,9 +33,15 @@ test -x "$REAL_WINE"
 file "$REAL_WINE" | grep -q 'ELF 32-bit'
 mv "$REAL_WINE" "$WINE_OUT/lib/wine/i386-unix/wine.qemu-real"
 
-NATIVE_SERVER="/opt/wine-staging/bin/wineserver"
-test -x "$NATIVE_SERVER"
-cp -a "$NATIVE_SERVER" "$WINE_OUT/bin/wineserver.native"
+REAL_SERVER_SRC=""
+while IFS= read -r candidate; do
+  if file "$candidate" | grep -q 'ELF 32-bit'; then
+    REAL_SERVER_SRC="$candidate"
+    break
+  fi
+done < <(find /opt/wine-staging -type f -name wineserver -print)
+test -n "$REAL_SERVER_SRC"
+cp -a "$REAL_SERVER_SRC" "$WINE_OUT/lib/wine/i386-unix/wineserver.qemu-real"
 
 cp -a /usr/bin/qemu-i386-static "$RUNTIME/qemu-i386-static"
 cp -a /lib/i386-linux-gnu "$ROOTFS/lib/"
@@ -53,7 +59,7 @@ cat > "$WINE_OUT/lib/wine/i386-unix/wine" <<'SH'
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME="$(cd "$HERE/../../../.." && pwd)"
-exec "$RUNTIME/qemu-i386-static" -L "$RUNTIME/wine32-qemu-rootfs" -R 0x100000000 "$HERE/wine.qemu-real" "$@"
+exec "$RUNTIME/qemu-i386-static" -L "$RUNTIME/wine32-qemu-rootfs" -R '0x100000000' "$HERE/wine.qemu-real" "$@"
 SH
 chmod 0755 "$WINE_OUT/lib/wine/i386-unix/wine"
 
@@ -69,14 +75,16 @@ cat > "$RUNTIME/qemu-wine32-bin/wineserver" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 RUNTIME="$(cd "$(dirname "$0")/.." && pwd)"
-exec "$RUNTIME/wine-11.18-staging-x86-qemu/bin/wineserver.native" "$@"
+REAL="$RUNTIME/wine-11.18-staging-x86-qemu/lib/wine/i386-unix/wineserver.qemu-real"
+exec "$RUNTIME/qemu-i386-static" -L "$RUNTIME/wine32-qemu-rootfs" -R '0x100000000' "$REAL" "$@"
 SH
 chmod 0755 "$RUNTIME/qemu-wine32-bin/wineserver"
 
-grep -q -- '-R 0x100000000' "$WINE_OUT/lib/wine/i386-unix/wine"
+grep -q -- "-R '0x100000000'" "$WINE_OUT/lib/wine/i386-unix/wine"
+grep -q -- "-R '0x100000000'" "$RUNTIME/qemu-wine32-bin/wineserver"
 test -x "$WINE_OUT/lib/wine/i386-unix/wine-preloader"
 test -x "$WINE_OUT/lib/wine/i386-unix/wine.qemu-real"
-test -x "$WINE_OUT/bin/wineserver.native"
+test -x "$WINE_OUT/lib/wine/i386-unix/wineserver.qemu-real"
 test -e "$ROOTFS/lib/ld-linux.so.2"
 
 export WINE_ROOT="$WINE_OUT"
