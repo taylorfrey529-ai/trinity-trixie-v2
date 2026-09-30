@@ -86,6 +86,7 @@ export WINEPREFIX="$RUNNER_TEMP/qemu32-prefix"
 export WINEARCH=win32
 export WINELOADER="$WINE_OUT/lib/wine/i386-unix/wine"
 export WINEDLLOVERRIDES='mscoree,mshtml,winegstreamer='
+mkdir -p "$WINEPREFIX"
 export LIBGL_ALWAYS_SOFTWARE=1
 export LIBGL_DRIVERS_PATH="$ROOTFS/usr/lib/i386-linux-gnu/dri"
 
