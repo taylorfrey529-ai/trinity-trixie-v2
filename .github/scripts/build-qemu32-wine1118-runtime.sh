@@ -97,6 +97,22 @@ for _ in $(seq 1 50); do
 done
 xdpyinfo -display :99 >/dev/null
 
+echo "=== qemu32 loader diagnostics ==="
+file "$RUNTIME/qemu-i386-static" "$WINELOADER" "$ROOTFS/lib/ld-linux.so.2"
+"$RUNTIME/qemu-i386-static" -L "$ROOTFS" "$ROOTFS/lib/ld-linux.so.2" --list "$WINELOADER" || true
+
+set +e
+"$RUNTIME/qemu-i386-static" -L "$ROOTFS" "$WINELOADER" --version
+RC_NO_RESERVE=$?
+"$RUNTIME/qemu-i386-static" -L "$ROOTFS" -R '0x100000000' "$WINELOADER" --version
+RC_RESERVE=$?
+set -e
+
+echo "qemu32_no_reserve_rc=$RC_NO_RESERVE"
+echo "qemu32_reserve_rc=$RC_RESERVE"
+test "$RC_NO_RESERVE" -eq 0
+test "$RC_RESERVE" -eq 0
+
 "$WINE" --version
 "$WINESERVER" -p0
 WINEDEBUG=-all "$WINE" wineboot.exe -u
