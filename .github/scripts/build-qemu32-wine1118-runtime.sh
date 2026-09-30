@@ -20,6 +20,11 @@ ROOTFS="$RUNTIME/wine32-qemu-rootfs"
 mkdir -p "$WINE_OUT/lib/wine" "$WINE_OUT/bin" "$RUNTIME/qemu-wine32-bin"
 mkdir -p "$ROOTFS/lib" "$ROOTFS/usr/lib" "$ROOTFS/usr/share" "$ROOTFS/etc"
 
+I386_UNIX="$(find /opt/wine-staging -type d -path '*/wine/i386-unix' -print -quit)"
+I386_WINDOWS="$(find /opt/wine-staging -type d -path '*/wine/i386-windows' -print -quit)"
+test -n "$I386_UNIX"
+test -n "$I386_WINDOWS"
+
 test -n "$I386_UNIX"
 test -n "$I386_WINDOWS"
 cp -a "$I386_UNIX" "$WINE_OUT/lib/wine/"
