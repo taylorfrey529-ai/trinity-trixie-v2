@@ -17,13 +17,43 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and self-test qemu32 lane
         run: bash .github/scripts/build-qemu32-wine1118-runtime.sh
-      - name: Upload transfer
+      - name: Upload transfer manifest
         uses: actions/upload-artifact@v4
         with:
-          name: qemu32-wine1118-transfer
-          path: |
-            transfer/payload.part.*
-            transfer/manifest.json
+          name: qemu32-wine1118-manifest
+          path: transfer/manifest.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload transfer part 000
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu32-wine1118-part-000
+          path: transfer/payload.part.000
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload transfer part 001
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu32-wine1118-part-001
+          path: transfer/payload.part.001
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload transfer part 002
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu32-wine1118-part-002
+          path: transfer/payload.part.002
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload transfer part 003
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu32-wine1118-part-003
+          path: transfer/payload.part.003
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
