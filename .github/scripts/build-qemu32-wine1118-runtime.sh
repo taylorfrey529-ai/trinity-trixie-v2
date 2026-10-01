@@ -234,8 +234,23 @@ echo "qemu32_step=xvfb_after_wineboot PASS"
 [[ "$WINEBOOT_RC" -eq 0 ]] || { echo "qemu32_step=wineboot FAIL"; exit "$WINEBOOT_RC"; }
 echo "qemu32_step=wineboot PASS"
 
-test -f "$WINEPREFIX/system.reg" || { echo "qemu32_step=prefix_registry FAIL"; exit 1; }
-echo "qemu32_step=prefix_registry PASS"
+echo "qemu32_step=prefix_registry_wait BEGIN"
+echo "WINEPREFIX=$WINEPREFIX"
+for _ in $(seq 1 100); do
+  [[ -f "$WINEPREFIX/system.reg" ]] && break
+  sleep 0.1
+done
+if [[ ! -f "$WINEPREFIX/system.reg" ]]; then
+  echo "qemu32_step=prefix_registry FAIL"
+  echo "=== requested prefix inventory ==="
+  find "$WINEPREFIX" -maxdepth 3 -printf '%y %p %s bytes\n' 2>/dev/null | sort | head -240 || true
+  echo "=== nearby system.reg search ==="
+  find "$RUNNER_TEMP" -maxdepth 4 -name system.reg -printf '%p %s bytes\n' 2>/dev/null | sort || true
+  echo "=== qemu/wine processes ==="
+  ps -eo pid,ppid,stat,comm,args | grep -E 'qemu-i386|wine|wineserver' | grep -v grep || true
+  exit 1
+fi
+echo "qemu32_step=prefix_registry PASS size=$(stat -c %s "$WINEPREFIX/system.reg")"
 
 echo "qemu32_step=cmd BEGIN"
 set +e
