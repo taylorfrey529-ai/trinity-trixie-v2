@@ -192,21 +192,64 @@ mkdir -p "$WINEPREFIX"
 
 Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >"$RUNNER_TEMP/xvfb.log" 2>&1 &
 XVFB_PID=$!
-trap 'kill "$XVFB_PID" 2>/dev/null || true' EXIT
+on_exit() {
+  rc=$?
+  trap - EXIT
+  if kill -0 "$XVFB_PID" 2>/dev/null; then
+    echo "xvfb_exit_state=ALIVE"
+  else
+    echo "xvfb_exit_state=DEAD"
+  fi
+  echo "=== xvfb.log tail ==="
+  tail -n 80 "$RUNNER_TEMP/xvfb.log" 2>/dev/null || true
+  kill "$XVFB_PID" 2>/dev/null || true
+  exit "$rc"
+}
+trap on_exit EXIT
 export DISPLAY=:99
 for _ in $(seq 1 50); do
   xdpyinfo -display :99 >/dev/null 2>&1 && break
   sleep 0.1
 done
 xdpyinfo -display :99 >/dev/null
+kill -0 "$XVFB_PID"
+echo "qemu32_step=xvfb_ready PASS"
 
+echo "qemu32_step=wineserver_start BEGIN"
 "$WINESERVER" -p0
-WINEDEBUG=-all "$WINE" wineboot.exe -u
-test -f "$WINEPREFIX/system.reg"
+echo "qemu32_step=wineserver_start PASS"
+kill -0 "$XVFB_PID"
+xdpyinfo -display :99 >/dev/null
+echo "qemu32_step=xvfb_after_wineserver PASS"
 
-OUTTEXT="$(WINEDEBUG=-all "$WINE" cmd.exe /c echo WOW_QEMU32_OK)"
+echo "qemu32_step=wineboot BEGIN"
+set +e
+WINEDEBUG=-all "$WINE" wineboot.exe -u
+WINEBOOT_RC=$?
+set -e
+echo "wineboot_rc=$WINEBOOT_RC"
+kill -0 "$XVFB_PID" || { echo "qemu32_step=xvfb_after_wineboot FAIL"; exit 1; }
+xdpyinfo -display :99 >/dev/null || { echo "qemu32_step=xvfb_after_wineboot FAIL"; exit 1; }
+echo "qemu32_step=xvfb_after_wineboot PASS"
+[[ "$WINEBOOT_RC" -eq 0 ]] || { echo "qemu32_step=wineboot FAIL"; exit "$WINEBOOT_RC"; }
+echo "qemu32_step=wineboot PASS"
+
+test -f "$WINEPREFIX/system.reg" || { echo "qemu32_step=prefix_registry FAIL"; exit 1; }
+echo "qemu32_step=prefix_registry PASS"
+
+echo "qemu32_step=cmd BEGIN"
+set +e
+OUTTEXT="$(WINEDEBUG=-all "$WINE" cmd.exe /c echo WOW_QEMU32_OK 2>&1)"
+CMD_RC=$?
+set -e
 printf '%s\n' "$OUTTEXT"
-[[ "$OUTTEXT" == *WOW_QEMU32_OK* ]]
+echo "cmd_rc=$CMD_RC"
+kill -0 "$XVFB_PID" || { echo "qemu32_step=xvfb_after_cmd FAIL"; exit 1; }
+xdpyinfo -display :99 >/dev/null || { echo "qemu32_step=xvfb_after_cmd FAIL"; exit 1; }
+echo "qemu32_step=xvfb_after_cmd PASS"
+[[ "$CMD_RC" -eq 0 ]] || { echo "qemu32_step=cmd FAIL"; exit "$CMD_RC"; }
+[[ "$OUTTEXT" == *WOW_QEMU32_OK* ]] || { echo "qemu32_step=cmd_marker FAIL"; exit 1; }
+echo "qemu32_step=cmd_marker PASS"
 
 "$WINESERVER" -k || true
 echo qemu32_selftest=PASS
