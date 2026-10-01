@@ -63,7 +63,7 @@ mkdir -p "$BUILD32"
 
 (
   cd "$BUILD32"
-  PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig     "$SRC_DIR/configure" --disable-tests
+  PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig     "$SRC_DIR/configure" --disable-tests --without-x
   make -j2 server/wineserver
 )
 
