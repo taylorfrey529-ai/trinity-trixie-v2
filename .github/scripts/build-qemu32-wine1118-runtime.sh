@@ -98,14 +98,21 @@ SH
 chmod 0755 "$QBIN/wineserver"
 
 # Match the archived September 29 client.sh contract exactly.
-test -x "$WINE_OUT/lib/wine/i386-unix/wine-preloader"
-test -x "$WINE_OUT/lib/wine/i386-unix/wine.qemu-real"
-test -x "$QBIN/wineserver.qemu-real"
-test -e "$ROOTFS/lib/ld-linux.so.2"
-test -f "$ROOTFS/usr/lib/i386-linux-gnu/libEGL_mesa.so.0"
-test -f "$ROOTFS/usr/share/glvnd/egl_vendor.d/50_mesa.json"
-grep -q -- "-R '0x100000000'" "$WINE_OUT/lib/wine/i386-unix/wine"
-grep -q -- "-R '0x100000000'" "$QBIN/wineserver"
+require_x() { [[ -x "$1" ]] || { echo "contract_check=FAIL kind=executable path=$1" >&2; exit 1; }; echo "contract_check=PASS kind=executable path=$1"; }
+require_e() { [[ -e "$1" ]] || { echo "contract_check=FAIL kind=exists path=$1" >&2; exit 1; }; echo "contract_check=PASS kind=exists path=$1"; }
+require_f() { [[ -f "$1" ]] || { echo "contract_check=FAIL kind=file path=$1" >&2; exit 1; }; echo "contract_check=PASS kind=file path=$1"; }
+require_grep() { local pattern="$1" path="$2"; grep -q -- "$pattern" "$path" || { echo "contract_check=FAIL kind=grep path=$path pattern=$pattern" >&2; exit 1; }; echo "contract_check=PASS kind=grep path=$path pattern=$pattern"; }
+
+echo "=== qemu32 archived-client contract checks ==="
+file "$REAL_SERVER"
+require_x "$WINE_OUT/lib/wine/i386-unix/wine-preloader"
+require_x "$WINE_OUT/lib/wine/i386-unix/wine.qemu-real"
+require_x "$QBIN/wineserver.qemu-real"
+require_e "$ROOTFS/lib/ld-linux.so.2"
+require_f "$ROOTFS/usr/lib/i386-linux-gnu/libEGL_mesa.so.0"
+require_f "$ROOTFS/usr/share/glvnd/egl_vendor.d/50_mesa.json"
+require_grep "-R '0x100000000'" "$WINE_OUT/lib/wine/i386-unix/wine"
+require_grep "-R '0x100000000'" "$QBIN/wineserver"
 
 echo "=== qemu32 identity ==="
 file "$RUNTIME/qemu-i386-static"
