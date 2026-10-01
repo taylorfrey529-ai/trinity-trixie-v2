@@ -36,6 +36,12 @@ cp -a "$I386_WINDOWS" "$WINE_OUT/lib/wine/"
 if [[ -d /opt/wine-staging/share ]]; then
   cp -a /opt/wine-staging/share "$WINE_OUT/"
 fi
+# The standalone helper wineserver resolves DATADIR relative to its executable:
+# qemu-wine32-bin/../share/wine/nls.
+mkdir -p "$RUNTIME/share"
+if [[ -d "$WINE_OUT/share/wine" ]]; then
+  cp -a "$WINE_OUT/share/wine" "$RUNTIME/share/"
+fi
 
 REAL_WINE="$WINE_OUT/lib/wine/i386-unix/wine"
 test -x "$REAL_WINE"
@@ -126,7 +132,7 @@ export WINE="$QBIN/wine"
 export WINESERVER="$QBIN/wineserver"
 export WINEPREFIX="$RUNNER_TEMP/qemu32-prefix"
 export WINEARCH=win32
-export WINELOADER="$WINE_OUT/lib/wine/i386-unix/wine"
+export WINELOADER="$WINE_OUT/lib/wine/i386-unix/wine.qemu-real"
 unset WINELOADERNOEXEC || true
 export WINEDLLOVERRIDES='mscoree,mshtml,winegstreamer='
 export LIBGL_ALWAYS_SOFTWARE=1
