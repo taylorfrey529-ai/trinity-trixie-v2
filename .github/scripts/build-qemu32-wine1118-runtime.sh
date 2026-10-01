@@ -4,6 +4,7 @@ set -euo pipefail
 WINE_VERSION=11.18
 WINEHQ_SERIES=11.x
 WINE_SOURCE_URL="https://dl.winehq.org/wine/source/$WINEHQ_SERIES/wine-$WINE_VERSION.tar.xz"
+WINE_STAGING_URL="https://github.com/wine-staging/wine-staging/archive/refs/tags/v$WINE_VERSION.tar.gz"
 
 sudo dpkg --add-architecture i386
 sudo install -d -m 0755 /etc/apt/keyrings
@@ -15,7 +16,7 @@ VERSION="$(apt-cache madison wine-staging-i386:i386 | awk '$3 ~ /^11\.18~noble/ 
 test -n "$VERSION"
 echo "WINEHQ_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-sudo apt-get install -y --no-install-recommends   qemu-user-static xvfb xauth x11-utils zstd   build-essential gcc-multilib g++-multilib libc6-dev-i386 pkg-config bison flex   libfreetype-dev:i386 libegl-mesa0:i386   "wine-staging-i386:i386=$VERSION"   "wine-staging-amd64=$VERSION"   "wine-staging=$VERSION"
+sudo apt-get install -y --no-install-recommends   qemu-user-static xvfb xauth x11-utils zstd   build-essential gcc-multilib g++-multilib libc6-dev-i386 pkg-config bison flex autoconf   libfreetype-dev:i386 libegl-mesa0:i386   "wine-staging-i386:i386=$VERSION"   "wine-staging-amd64=$VERSION"   "wine-staging=$VERSION"
 
 OUT="$RUNNER_TEMP/qemu32"
 RUNTIME="$OUT/runtime"
@@ -61,10 +62,18 @@ if [[ -d /etc/fonts ]]; then cp -a /etc/fonts "$ROOTFS/etc/"; fi
 
 echo "=== build matching i386 wineserver from Wine $WINE_VERSION source ==="
 SRC_TAR="$RUNNER_TEMP/wine-$WINE_VERSION.tar.xz"
+STAGING_TAR="$RUNNER_TEMP/wine-staging-$WINE_VERSION.tar.gz"
 SRC_DIR="$RUNNER_TEMP/wine-$WINE_VERSION"
+STAGING_DIR="$RUNNER_TEMP/wine-staging-$WINE_VERSION"
 BUILD32="$RUNNER_TEMP/wine-$WINE_VERSION-build32"
 wget -qO "$SRC_TAR" "$WINE_SOURCE_URL"
+wget -qO "$STAGING_TAR" "$WINE_STAGING_URL"
 tar -xf "$SRC_TAR" -C "$RUNNER_TEMP"
+tar -xf "$STAGING_TAR" -C "$RUNNER_TEMP"
+test -x "$STAGING_DIR/staging/patchinstall.py"
+test "$(cat "$STAGING_DIR/staging/VERSION")" = "Wine Staging $WINE_VERSION"
+echo "=== apply Wine Staging $WINE_VERSION patches ==="
+python3 "$STAGING_DIR/staging/patchinstall.py" DESTDIR="$SRC_DIR" --all
 mkdir -p "$BUILD32"
 
 (
