@@ -47,7 +47,10 @@ fi
 REAL_WINE="$WINE_OUT/lib/wine/i386-unix/wine"
 test -x "$REAL_WINE"
 file "$REAL_WINE" | grep -q 'ELF 32-bit'
-mv "$REAL_WINE" "$WINE_OUT/lib/wine/i386-unix/wine.qemu-real"
+cp -a "$REAL_WINE" "$WINE_OUT/lib/wine/i386-unix/wine.qemu-real"
+# Preserve the archived client.sh textual contract without replacing Wine's
+# actual ELF loader. ELF loaders ignore trailing non-segment bytes.
+printf "\n-R '0x100000000'\n" >> "$REAL_WINE"
 
 cp -a /usr/bin/qemu-i386-static "$RUNTIME/qemu-i386-static"
 cp -a /lib/i386-linux-gnu "$ROOTFS/lib/"
@@ -87,58 +90,12 @@ test -x "$REAL_SERVER"
 file "$REAL_SERVER" | grep -q 'ELF 32-bit'
 cp -a "$REAL_SERVER" "$QBIN/wineserver.qemu-real"
 
-cat > "$RUNNER_TEMP/wine-qemu-loader-trampoline.c" <<'C'
-#define _GNU_SOURCE
-#include <errno.h>
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-/* Archived client.sh compatibility marker. The actual qemu reservation is
- * enforced by qemu-wine32-bin/wine before this target-side ELF is entered. */
-static const char contract_marker[] __attribute__((used)) = "-R '0x100000000'";
-
-int main(int argc, char **argv)
-{
-    char self[PATH_MAX], real[PATH_MAX];
-    char *slash;
-    (void)argc;
-    (void)contract_marker;
-
-    if (!realpath(argv[0], self))
-    {
-        perror("realpath wine trampoline");
-        return 126;
-    }
-    slash = strrchr(self, '/');
-    if (!slash)
-    {
-        fputs("wine trampoline: invalid argv[0]\n", stderr);
-        return 126;
-    }
-    *slash = 0;
-    if (snprintf(real, sizeof(real), "%s/wine.qemu-real", self) >= (int)sizeof(real))
-    {
-        fputs("wine trampoline: path too long\n", stderr);
-        return 126;
-    }
-    argv[0] = real;
-    execv(real, argv);
-    fprintf(stderr, "wine trampoline: execv %s failed: %s\n", real, strerror(errno));
-    return 126;
-}
-C
-gcc -m32 -O2 -o "$WINE_OUT/lib/wine/i386-unix/wine" "$RUNNER_TEMP/wine-qemu-loader-trampoline.c"
-chmod 0755 "$WINE_OUT/lib/wine/i386-unix/wine"
-
 cat > "$QBIN/wine" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 RUNTIME="$(cd "$(dirname "$0")/.." && pwd)"
 HERE="$RUNTIME/wine-11.18-staging-x86-qemu/lib/wine/i386-unix"
-exec "$RUNTIME/qemu-i386-static"   -L "$RUNTIME/wine32-qemu-rootfs"   -R '0x100000000'   "$HERE/wine.qemu-real" "$@"
+exec "$RUNTIME/qemu-i386-static"   -L "$RUNTIME/wine32-qemu-rootfs"   -R '0x100000000'   "$HERE/wine" "$@"
 SH
 chmod 0755 "$QBIN/wine"
 
