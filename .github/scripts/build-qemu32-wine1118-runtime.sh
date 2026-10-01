@@ -15,7 +15,7 @@ VERSION="$(apt-cache madison wine-staging-i386:i386 | awk '$3 ~ /^11\.18~noble/ 
 test -n "$VERSION"
 echo "WINEHQ_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-sudo apt-get install -y --no-install-recommends   qemu-user-static xvfb xauth x11-utils zstd   build-essential gcc-multilib g++-multilib libc6-dev-i386 pkg-config bison flex   "wine-staging-i386:i386=$VERSION"   "wine-staging-amd64=$VERSION"   "wine-staging=$VERSION"
+sudo apt-get install -y --no-install-recommends   qemu-user-static xvfb xauth x11-utils zstd   build-essential gcc-multilib g++-multilib libc6-dev-i386 pkg-config bison flex   libfreetype-dev:i386   "wine-staging-i386:i386=$VERSION"   "wine-staging-amd64=$VERSION"   "wine-staging=$VERSION"
 
 OUT="$RUNNER_TEMP/qemu32"
 RUNTIME="$OUT/runtime"
