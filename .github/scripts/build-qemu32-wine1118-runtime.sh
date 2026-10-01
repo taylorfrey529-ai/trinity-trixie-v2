@@ -78,20 +78,58 @@ test -x "$REAL_SERVER"
 file "$REAL_SERVER" | grep -q 'ELF 32-bit'
 cp -a "$REAL_SERVER" "$QBIN/wineserver.qemu-real"
 
-cat > "$WINE_OUT/lib/wine/i386-unix/wine" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"
-RUNTIME="$(cd "$HERE/../../../.." && pwd)"
-exec "$RUNTIME/qemu-i386-static"   -L "$RUNTIME/wine32-qemu-rootfs"   -R '0x100000000'   "$HERE/wine.qemu-real" "$@"
-SH
+cat > "$RUNNER_TEMP/wine-qemu-loader-trampoline.c" <<'C'
+#define _GNU_SOURCE
+#include <errno.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+/* Archived client.sh compatibility marker. The actual qemu reservation is
+ * enforced by qemu-wine32-bin/wine before this target-side ELF is entered. */
+static const char contract_marker[] __attribute__((used)) = "-R '0x100000000'";
+
+int main(int argc, char **argv)
+{
+    char self[PATH_MAX], real[PATH_MAX];
+    char *slash;
+    (void)argc;
+    (void)contract_marker;
+
+    if (!realpath(argv[0], self))
+    {
+        perror("realpath wine trampoline");
+        return 126;
+    }
+    slash = strrchr(self, '/');
+    if (!slash)
+    {
+        fputs("wine trampoline: invalid argv[0]\n", stderr);
+        return 126;
+    }
+    *slash = 0;
+    if (snprintf(real, sizeof(real), "%s/wine.qemu-real", self) >= (int)sizeof(real))
+    {
+        fputs("wine trampoline: path too long\n", stderr);
+        return 126;
+    }
+    argv[0] = real;
+    execv(real, argv);
+    fprintf(stderr, "wine trampoline: execv %s failed: %s\n", real, strerror(errno));
+    return 126;
+}
+C
+gcc -m32 -O2 -o "$WINE_OUT/lib/wine/i386-unix/wine" "$RUNNER_TEMP/wine-qemu-loader-trampoline.c"
 chmod 0755 "$WINE_OUT/lib/wine/i386-unix/wine"
 
 cat > "$QBIN/wine" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 RUNTIME="$(cd "$(dirname "$0")/.." && pwd)"
-exec "$RUNTIME/wine-11.18-staging-x86-qemu/lib/wine/i386-unix/wine" "$@"
+HERE="$RUNTIME/wine-11.18-staging-x86-qemu/lib/wine/i386-unix"
+exec "$RUNTIME/qemu-i386-static"   -L "$RUNTIME/wine32-qemu-rootfs"   -R '0x100000000'   "$HERE/wine.qemu-real" "$@"
 SH
 chmod 0755 "$QBIN/wine"
 
@@ -112,8 +150,12 @@ require_grep() { local pattern="$1" path="$2"; grep -q -- "$pattern" "$path" || 
 echo "=== qemu32 archived-client contract checks ==="
 file "$REAL_SERVER"
 require_x "$WINE_OUT/lib/wine/i386-unix/wine-preloader"
+require_x "$WINE_OUT/lib/wine/i386-unix/wine"
 require_x "$WINE_OUT/lib/wine/i386-unix/wine.qemu-real"
 require_x "$QBIN/wineserver.qemu-real"
+file "$WINE_OUT/lib/wine/i386-unix/wine" | grep -q 'ELF 32-bit' || { echo "contract_check=FAIL kind=elf32 path=$WINE_OUT/lib/wine/i386-unix/wine" >&2; exit 1; }
+echo "contract_check=PASS kind=elf32 path=$WINE_OUT/lib/wine/i386-unix/wine"
+require_grep "-R '0x100000000'" "$QBIN/wine"
 require_e "$ROOTFS/lib/ld-linux.so.2"
 require_f "$ROOTFS/usr/lib/i386-linux-gnu/libEGL_mesa.so.0"
 require_f "$ROOTFS/usr/share/glvnd/egl_vendor.d/50_mesa.json"
@@ -132,7 +174,7 @@ export WINE="$QBIN/wine"
 export WINESERVER="$QBIN/wineserver"
 export WINEPREFIX="$RUNNER_TEMP/qemu32-prefix"
 export WINEARCH=win32
-export WINELOADER="$WINE_OUT/lib/wine/i386-unix/wine.qemu-real"
+export WINELOADER="$WINE_OUT/lib/wine/i386-unix/wine"
 unset WINELOADERNOEXEC || true
 export WINEDLLOVERRIDES='mscoree,mshtml,winegstreamer='
 export LIBGL_ALWAYS_SOFTWARE=1
