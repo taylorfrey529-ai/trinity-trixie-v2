@@ -14,7 +14,8 @@ sudo apt-get update
 
 VERSION="$(apt-cache madison wine-staging-i386:i386 | awk '$3 ~ /^11\.18~noble/ {print $3; exit}')"
 test -n "$VERSION"
-echo "WINEHQ_VERSION=$VERSION" >> "$GITHUB_ENV"
+export WINEHQ_VERSION="$VERSION"
+echo "WINEHQ_VERSION=$WINEHQ_VERSION" >> "$GITHUB_ENV"
 
 sudo apt-get install -y --no-install-recommends   qemu-user-static xvfb xauth x11-utils zstd   build-essential gcc-multilib g++-multilib libc6-dev-i386 pkg-config bison flex autoconf   libfreetype-dev:i386 libegl-mesa0:i386   "wine-staging-i386:i386=$VERSION"   "wine-staging-amd64=$VERSION"   "wine-staging=$VERSION"
 
