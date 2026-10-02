@@ -1,0 +1,123 @@
+name: Build qemu32 Noble i386 graphics overlay
+
+on:
+  push:
+    branches:
+      - repair/qemu32-noble-i386-graphics
+    paths:
+      - '.github/workflows/qemu32-noble-i386-graphics.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Noble i386 graphics runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1:i386 libglx0:i386 libopengl0:i386 libegl1:i386 \
+            libgl1-mesa-dri:i386 mesa-vulkan-drivers:i386 libvulkan1:i386 \
+            libxrandr2:i386 libxcursor1:i386 libxi6:i386 \
+            libxcomposite1:i386 libxinerama1:i386 libxxf86vm1:i386
+
+      - name: Stage graphics-only overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          O="$GITHUB_WORKSPACE/overlay"
+          L="$O/usr/lib/i386-linux-gnu"
+          mkdir -p "$L" "$O/usr/share"
+
+          copy_glob() {
+            local pattern="$1"
+            shopt -s nullglob
+            local files=( $pattern )
+            shopt -u nullglob
+            ((${#files[@]})) || return 0
+            cp -a "${files[@]}" "$L/"
+          }
+
+          copy_glob '/usr/lib/i386-linux-gnu/libGL.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libGLX.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libGLdispatch.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libOpenGL.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libEGL.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libvulkan.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libXrandr.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libXcursor.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libXi.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libXcomposite.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libXinerama.so*'
+          copy_glob '/usr/lib/i386-linux-gnu/libXxf86vm.so*'
+
+          test -f /usr/lib/i386-linux-gnu/dri/swrast_dri.so
+          cp -a /usr/lib/i386-linux-gnu/dri "$L/"
+          copy_glob '/usr/lib/i386-linux-gnu/libvulkan_*.so*'
+
+          for d in glvnd vulkan drirc.d; do
+            if [[ -d "/usr/share/$d" ]]; then
+              cp -a "/usr/share/$d" "$O/usr/share/"
+            fi
+          done
+
+      - name: Verify required overlay surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          L="$GITHUB_WORKSPACE/overlay/usr/lib/i386-linux-gnu"
+          for p in \
+            libGL.so.1 libGLX.so.0 libOpenGL.so.0 libEGL.so.1 libvulkan.so.1 \
+            libXrandr.so.2 libXcursor.so.1 libXi.so.6 libXcomposite.so.1 \
+            libXinerama.so.1 libXxf86vm.so.1 dri/swrast_dri.so; do
+            test -e "$L/$p" || { echo "missing=$p"; exit 1; }
+            echo "overlay_required=PASS path=$p"
+          done
+
+          file "$L/dri/swrast_dri.so"
+          ldd "$L/dri/swrast_dri.so" | tee swrast.ldd.txt
+          ! grep -q 'not found' swrast.ldd.txt
+
+          dpkg-query -W \
+            libgl1:i386 libglx0:i386 libopengl0:i386 libegl1:i386 \
+            libgl1-mesa-dri:i386 mesa-vulkan-drivers:i386 libvulkan1:i386 \
+            libxrandr2:i386 libxcursor1:i386 libxi6:i386 \
+            libxcomposite1:i386 libxinerama1:i386 libxxf86vm1:i386 \
+            > package-versions.txt
+
+      - name: Manifest and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          find overlay -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          tar --zstd -cf qemu32-noble-i386-graphics-overlay.tar.zst -C overlay .
+          sha256sum qemu32-noble-i386-graphics-overlay.tar.zst > qemu32-noble-i386-graphics-overlay.tar.zst.sha256
+          {
+            echo 'base_qemu32_head=dbccb26141968324ebf78c973fb09d5a512256c9'
+            echo 'ubuntu_release=24.04'
+            echo 'architecture=i386'
+            echo 'purpose=Wine/WoW GLX/EGL/DRI/Vulkan device enumeration'
+          } > OVERLAY-MANIFEST.env
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qemu32-noble-i386-graphics-overlay
+          path: |
+            qemu32-noble-i386-graphics-overlay.tar.zst
+            qemu32-noble-i386-graphics-overlay.tar.zst.sha256
+            SHA256SUMS
+            OVERLAY-MANIFEST.env
+            package-versions.txt
+            swrast.ldd.txt
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
