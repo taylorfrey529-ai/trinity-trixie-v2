@@ -58,6 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build package
+          cd build
           "$GITHUB_WORKSPACE/wine-11.18/configure" \
             --enable-archs=i386,x86_64 \
             --disable-tests \
